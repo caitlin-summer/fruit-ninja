@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🍎 Chém Hoa Quả Ultimate (Offline)</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body { 
+      font-family: 'Lexend', sans-serif;
+      overflow: hidden;
+      background: linear-gradient(180deg, #A2D2FF 0%, #FFD1E3 100%);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    
+    #game-canvas {
+      display: block;
+      cursor: none;
+    }
+    
+    /* Custom Cursor */
+    #cursor {
+      position: fixed;
+      width: 25px;
+      height: 25px;
+      border: 3px solid #FFF;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      box-shadow: 0 0 15px rgba(255,255,255,1);
+      background: radial-gradient(circle, rgba(255,255,255,0.6), transparent);
+      transform: translate(-50%, -50%);
+    }
+    
+    /* Menu Overlay */
+    .overlay-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      background: linear-gradient(135deg, rgba(162, 210, 255, 0.95) 0%, rgba(255, 209, 227, 0.95) 100%);
+      backdrop-filter: blur(15px);
+      transition: all 0.4s ease;
+    }
+    
+    .hidden { opacity: 0; pointer-events: none; transform: scale(1.1); }
+    
+    h1 {
+      font-size: clamp(40px, 8vw, 70px);
+      font-weight: 800;
+      color: #FF5C8A;
+      text-shadow: 3px 3px 0px #FFF, 0px 10px 20px rgba(0,0,0,0.1);
+      margin-bottom: 10px;
+      animation: float 3s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-15px); }
+    }
+    
+    .mode-container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 30px;
+    }
+    
+    .card-btn {
+      background: white;
+      padding: 25px;
+      border-radius: 25px;
+      width: 180px;
+      cursor: pointer;
+      transition: 0.3s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 4px solid #FFF;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    }
+    
+    .card-btn:hover { transform: translateY(-8px); box-shadow: 0 15px 30px rgba(0,0,0,0.1); }
+    .card-btn.classic { background: #FF85A2; color: white; }
+    .card-btn.timed { background: #4ECDC4; color: white; }
+    
+    /* HUD */
+    #hud {
+      position: absolute;
+      top: 25px;
+      left: 25px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 10;
+    }
+    
+    .hud-box {
+      background: rgba(255,255,255,0.9);
+      padding: 12px 25px;
+      border-radius: 20px;
+      border: 3px solid #FF5C8A;
+      font-weight: 800;
+      color: #FF5C8A;
+      font-size: 20px;
+    }
+    
+    #lives-container {
+      position: absolute;
+      top: 25px;
+      right: 25px;
+      font-size: 28px;
+      z-index: 10;
+      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.1));
+    }
+
+    #timer-container {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 28px;
+      font-weight: 800;
+      color: #FFF;
+      background: #FF5C8A;
+      padding: 10px 30px;
+      border-radius: 50px;
+      border: 4px solid #FFF;
+      display: none;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+
+    .modal {
+      background: white;
+      padding: 40px;
+      border-radius: 35px;
+      width: 90%;
+      max-width: 480px;
+      text-align: center;
+      border: 8px solid #FFD1E3;
+    }
+    
+    .primary-btn {
+      background: #FF5C8A;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 18px;
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      width: 100%;
+      margin: 10px 0;
+      transition: 0.2s;
+    }
+    
+    .primary-btn:hover { background: #FF85A2; transform: scale(1.02); }
+    .primary-btn:disabled { background: #ccc; cursor: not-allowed; }
+    
+    .input-field {
+      width: 100%;
+      padding: 15px;
+      border-radius: 15px;
+      border: 3px solid #EEE;
+      font-family: inherit;
+      font-size: 16px;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .tab-container {
+      display: flex;
+      background: #f0f0f0;
+      padding: 5px;
+      border-radius: 15px;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: none;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 12px;
+      transition: 0.3s;
+      color: #666;
+    }
+    .tab-btn.active {
+      background: white;
+      color: #FF5C8A;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+
+    #sound-toggle {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: white;
+      border: 3px solid #FF5C8A;
+      width: 50px;
+      height: 50px;
+      border-radius: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 4px 0 #FF5C8A;
+      transition: 0.2s;
+      z-index: 1100;
+    }
+    #sound-toggle:active {
+      transform: translateY(4px);
+      box-shadow: none;
+    }
+    
+    .penalty-flash {
+      color: red !important;
+      animation: flash-red 0.5s ease;
+    }
+    @keyframes flash-red {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.2); color: red; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="cursor"></div>
+  <canvas id="game-canvas"></canvas>
+
+  <button id="sound-toggle" onclick="toggleSound()">🔊</button>
+
+  <div id="hud" style="display:none">
+    <div class="hud-box">🎯 ĐIỂM: <span id="score-val" style="color:#4ECDC4">0</span></div>
+  </div>
+  
+  <div id="lives-container" style="display:none">❤️❤️❤️</div>
+  <div id="timer-container">⏱️ <span id="timer-val">30</span>s</div>
+
+  <!-- Main Menu -->
+  <div id="main-menu" class="overlay-screen">
+    <h1>🍎 FRUIT NINJA</h1>
+    <p style="color:#666; font-weight:600">CHÉM MƯỢT MÀ - COMBO LIÊN HOÀN</p>
+    
+    <div class="mode-container">
+      <div class="card-btn classic" onclick="startGame('classic')">
+        <span style="font-size:40px">🎮</span>
+        <strong style="margin:10px 0">CỔ ĐIỂN</strong>
+        <small style="font-size:11px; opacity:0.8">Hụt quả là mất chuỗi combo!</small>
+      </div>
+      <div class="card-btn timed" onclick="startGame('timed')">
+        <span style="font-size:40px">⏱️</span>
+        <strong style="margin:10px 0">30 GIÂY</strong>
+        <small style="font-size:11px; opacity:0.8">Chém liên tục để nhân điểm</small>
+      </div>
+    </div>
+    
+    <button class="primary-btn" style="max-width:200px; margin-top:30px; background:#4ECDC4" onclick="showLeaderboard()">🏆 BẢNG VÀNG</button>
+  </div>
+
+  <!-- Game Over -->
+  <div id="game-over" class="overlay-screen hidden">
+    <div class="modal">
+      <h2 style="color:#FF5C8A; font-size:32px">KẾT THÚC!</h2>
+      <div style="font-size:50px; font-weight:800; margin:20px 0; color:#4ECDC4">
+        <span id="final-score">0</span>
+      </div>
+      <input type="text" id="player-name" class="input-field" placeholder="Tên của bạn..." maxlength="12">
+      <button class="primary-btn" id="save-score-btn">LƯU ĐIỂM CAO</button>
+      <button class="primary-btn" style="background:#4ECDC4" onclick="handlePlayAgain()">CHƠI LẠI</button>
+      <button class="primary-btn" style="background:#CCC" onclick="goToMenu()">TRANG CHỦ</button>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="leaderboard-screen" class="overlay-screen hidden">
+    <div class="modal">
+      <h2>🏆 TOP CAO THỦ</h2>
+      
+      <div class="tab-container">
+        <button class="tab-btn active" id="tab-classic" onclick="switchLeaderboardMode('classic')">CỔ ĐIỂN</button>
+        <button class="tab-btn" id="tab-timed" onclick="switchLeaderboardMode('timed')">30 GIÂY</button>
+      </div>
+
+      <div id="leaderboard-content" style="margin:10px 0; text-align:left; max-height:250px; overflow-y:auto"></div>
+      <button class="primary-btn" onclick="closeLeaderboard()">QUAY LẠI</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Hệ thống Lưu trữ Nội bộ (Thay thế Firebase) ---
+    const STORAGE_KEY = 'fruit_ninja_scores_offline';
+
+    function getLocalScores() {
+      const scores = localStorage.getItem(STORAGE_KEY);
+      return scores ? JSON.parse(scores) : [];
+    }
+
+    function saveLocalScore(name, score, mode) {
+      const scores = getLocalScores();
+      scores.push({
+        name,
+        score,
+        mode,
+        timestamp: Date.now()
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
+    }
+
+    // --- Biến toàn cục ---
+    let leaderboardViewMode = 'classic';
+    let soundEnabled = true;
+
+    // --- Audio System (Synthesized) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let bgMusicInterval;
+
+    function playSound(type) {
+      if (!soundEnabled) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      const now = audioCtx.currentTime;
+
+      if (type === 'slice') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start();
+        osc.stop(now + 0.1);
+      } else if (type === 'bomb') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start();
+        osc.stop(now + 0.3);
+      } else if (type === 'combo') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start();
+        osc.stop(now + 0.2);
+      } else if (type === 'ui') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+        osc.start();
+        osc.stop(now + 0.05);
+      }
+    }
+
+    function startBgMusic() {
+      if (bgMusicInterval) clearInterval(bgMusicInterval);
+      const notes = [130.81, 146.83, 155.56, 174.61]; // C3, D3, Eb3, F3
+      let step = 0;
+      
+      bgMusicInterval = setInterval(() => {
+        if (!soundEnabled || gameState !== 'PLAYING') return;
+        
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.connect(g);
+        g.connect(audioCtx.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(notes[step % notes.length], now);
+        g.gain.setValueAtTime(0.04, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        
+        osc.start();
+        osc.stop(now + 0.8);
+        step++;
+      }, 500);
+    }
+
+    function stopBgMusic() {
+      if (bgMusicInterval) {
+        clearInterval(bgMusicInterval);
+        bgMusicInterval = null;
+      }
+    }
+
+    window.toggleSound = () => {
+      soundEnabled = !soundEnabled;
+      document.getElementById('sound-toggle').textContent = soundEnabled ? '🔊' : '🔇';
+      playSound('ui');
+      if (!soundEnabled) stopBgMusic();
+      else if (gameState === 'PLAYING') startBgMusic();
+    };
+
+    // --- Game Logic ---
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const cursor = document.getElementById('cursor');
+    
+    let gameState = 'MENU';
+    let gameMode = 'classic';
+    let score = 0;
+    let lives = 3;
+    let timeLeft = 30;
+    let timerInterval;
+    let shakeTime = 0;
+
+    let fruits = [];
+    let particles = [];
+    let floatingTexts = [];
+    let slashTrail = [];
+    let lastMousePos = { x: 0, y: 0 };
+    let currentMousePos = { x: 0, y: 0 };
+    
+    let streakCount = 0;
+
+    const fruitData = [
+      { emoji: '🍎', color: '#FF4D4D', pts: 10 },
+      { emoji: '🍊', color: '#FFA500', pts: 10 },
+      { emoji: '🍋', color: '#FFFF00', pts: 15 },
+      { emoji: '🍌', color: '#FFE135', pts: 15 },
+      { emoji: '🍉', color: '#FC6C85', pts: 25 },
+      { emoji: '🍇', color: '#6F2DA8', pts: 30 },
+      { emoji: '🍓', color: '#FB2943', pts: 30 },
+      { emoji: '🥝', color: '#8BC34A', pts: 40 },
+      { emoji: '🍑', color: '#FFCC99', pts: 40 },
+      { emoji: '🍍', color: '#F4BB44', pts: 50 }
+    ];
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    class FloatingText {
+      constructor(x, y, text, color, isCombo = false) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 1.0;
+        this.vy = isCombo ? -2.5 : -1.8;
+        this.size = isCombo ? 26 : 18; 
+        this.scale = isCombo ? 1.2 : 1.0;
+      }
+      update() {
+        this.y += this.vy;
+        this.life -= 0.02;
+        if (this.scale > 1) this.scale -= 0.04;
+      }
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.font = `bold ${this.size * this.scale}px Lexend`;
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = 'rgba(255,255,255,0.8)';
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+      }
+    }
+
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 6 + 2;
+        this.vx = (Math.random() - 0.5) * 16;
+        this.vy = (Math.random() - 0.5) * 16;
+        this.life = 1.0;
+        this.decay = 0.02 + Math.random() * 0.02;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.4;
+        this.life -= this.decay;
+      }
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    class Fruit {
+      constructor(isBomb = false) {
+        this.isBomb = isBomb;
+        this.radius = 40;
+        this.x = Math.random() * (canvas.width - 200) + 100;
+        this.y = canvas.height + 100;
+        this.vx = (canvas.width / 2 - this.x) * 0.015 + (Math.random() - 0.5) * 4;
+        this.vy = -(Math.random() * 6 + 14);
+        this.gravity = 0.35;
+        
+        if (isBomb) {
+          this.emoji = '💣';
+          this.color = '#333';
+          this.pts = 0;
+        } else {
+          const data = fruitData[Math.floor(Math.random() * fruitData.length)];
+          this.emoji = data.emoji;
+          this.color = data.color;
+          this.pts = data.pts;
+        }
+        
+        this.rotation = 0;
+        this.rotationSpeed = (Math.random() - 0.5) * 0.12;
+        this.sliced = false;
+        this.sliceAngle = 0;
+        this.opacity = 1;
+        this.scale = 0;
+      }
+
+      update() {
+        if (this.scale < 1) this.scale += 0.1;
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.rotation += this.rotationSpeed;
+        if (this.sliced) this.opacity -= 0.08;
+      }
+
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(this.scale, this.scale);
+        ctx.rotate(this.rotation);
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(0,0,0,0.2)';
+        ctx.font = `${this.radius * 2}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha = this.opacity;
+        
+        if (this.sliced && !this.isBomb) {
+          ctx.save();
+          ctx.rotate(this.sliceAngle);
+          ctx.fillText(this.emoji, -12, 0);
+          ctx.restore();
+          ctx.save();
+          ctx.rotate(this.sliceAngle + Math.PI);
+          ctx.fillText(this.emoji, 12, 0);
+          ctx.restore();
+        } else {
+          ctx.fillText(this.emoji, 0, 0);
+        }
+        ctx.restore();
+      }
+
+      slice(angle) {
+        if (this.sliced) return;
+        this.sliced = true;
+        this.sliceAngle = angle;
+        
+        if (this.isBomb) {
+          playSound('bomb');
+          shakeTime = 20;
+          streakCount = 0; 
+          if (gameMode === 'classic') {
+            lives--;
+            updateLives();
+            floatingTexts.push(new FloatingText(this.x, this.y, 'BÙM!', '#FF0000'));
+            if (lives <= 0) endGame();
+          } else {
+            score = Math.max(0, score - 50);
+            updateHUD();
+            flashScorePenalty();
+            floatingTexts.push(new FloatingText(this.x, this.y, '-50', '#FF0000'));
+          }
+        } else {
+          playSound('slice');
+          streakCount++; 
+          
+          let bonus = 0;
+          if (streakCount >= 2) {
+            bonus = (streakCount - 1) * 5;
+            playSound('combo');
+            floatingTexts.push(new FloatingText(this.x, this.y - 40, `COMBO X${streakCount - 1}`, '#FFD700', true));
+          }
+          
+          score += this.pts + bonus;
+          updateHUD();
+          floatingTexts.push(new FloatingText(this.x, this.y, `+${this.pts}`, this.color));
+        }
+        
+        for (let i = 0; i < 20; i++) {
+          particles.push(new Particle(this.x, this.y, this.color));
+        }
+      }
+    }
+
+    function flashScorePenalty() {
+      const scoreEl = document.getElementById('score-val');
+      scoreEl.classList.add('penalty-flash');
+      setTimeout(() => scoreEl.classList.remove('penalty-flash'), 500);
+    }
+
+    const updateHUD = () => document.getElementById('score-val').textContent = score;
+    const updateLives = () => document.getElementById('lives-container').textContent = '❤️'.repeat(Math.max(0, lives));
+
+    const startGame = (mode) => {
+      playSound('ui');
+      gameMode = mode;
+      score = 0;
+      lives = 3;
+      timeLeft = 30;
+      fruits = [];
+      particles = [];
+      floatingTexts = [];
+      slashTrail = [];
+      streakCount = 0;
+      gameState = 'PLAYING';
+      
+      document.getElementById('main-menu').classList.add('hidden');
+      document.getElementById('game-over').classList.add('hidden');
+      document.getElementById('leaderboard-screen').classList.add('hidden');
+      document.getElementById('hud').style.display = 'block';
+      
+      const saveBtn = document.getElementById('save-score-btn');
+      saveBtn.disabled = false;
+      saveBtn.textContent = "LƯU ĐIỂM CAO";
+
+      if (mode === 'classic') {
+        document.getElementById('lives-container').style.display = 'block';
+        document.getElementById('timer-container').style.display = 'none';
+        updateLives();
+      } else {
+        document.getElementById('lives-container').style.display = 'none';
+        document.getElementById('timer-container').style.display = 'block';
+        document.getElementById('timer-val').textContent = timeLeft;
+        startTimer();
+      }
+      updateHUD();
+      startBgMusic();
+    };
+
+    const startTimer = () => {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer-val').textContent = timeLeft;
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    };
+
+    const endGame = () => {
+      gameState = 'GAMEOVER';
+      if (timerInterval) clearInterval(timerInterval);
+      document.getElementById('final-score').textContent = score;
+      document.getElementById('game-over').classList.remove('hidden');
+      playSound('ui');
+      stopBgMusic();
+    };
+
+    window.goToMenu = () => {
+      playSound('ui');
+      gameState = 'MENU';
+      document.getElementById('main-menu').classList.remove('hidden');
+      document.getElementById('game-over').classList.add('hidden');
+      document.getElementById('leaderboard-screen').classList.add('hidden');
+      document.getElementById('hud').style.display = 'none';
+      document.getElementById('timer-container').style.display = 'none';
+      document.getElementById('lives-container').style.display = 'none';
+      stopBgMusic();
+    };
+
+    window.handlePlayAgain = () => {
+        startGame(gameMode);
+    };
+
+    const handleMove = (x, y) => {
+      currentMousePos = { x, y };
+      cursor.style.left = `${x}px`;
+      cursor.style.top = `${y}px`;
+
+      if (gameState === 'PLAYING') {
+        const dist = Math.hypot(x - lastMousePos.x, y - lastMousePos.y);
+        if (dist > 10) { 
+          slashTrail.push({ x, y, age: 0 });
+          const angle = Math.atan2(y - lastMousePos.y, x - lastMousePos.x);
+          fruits.forEach(f => {
+            if (!f.sliced && Math.hypot(f.x - x, f.y - y) < f.radius + 15) {
+              f.slice(angle);
+            }
+          });
+        }
+      }
+      lastMousePos = { x, y };
+    };
+
+    window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+    window.addEventListener('touchmove', e => {
+      const touch = e.touches[0];
+      handleMove(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    const spawnLoop = () => {
+      if (gameState === 'PLAYING') {
+        const bombChance = gameMode === 'classic' ? 0.15 : 0.25;
+        fruits.push(new Fruit(Math.random() < bombChance));
+      }
+      setTimeout(spawnLoop, 500 + Math.random() * 800);
+    };
+    spawnLoop();
+
+    const render = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      if (shakeTime > 0) {
+        ctx.translate((Math.random()-0.5)*10, (Math.random()-0.5)*10);
+        shakeTime--;
+      }
+
+      if (gameState === 'PLAYING') {
+        if (slashTrail.length > 1) {
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#FFF';
+          ctx.moveTo(slashTrail[0].x, slashTrail[0].y);
+          for (let i = 1; i < slashTrail.length; i++) {
+            ctx.lineTo(slashTrail[i].x, slashTrail[i].y);
+            slashTrail[i].age++;
+          }
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+        slashTrail = slashTrail.filter(p => p.age < 12);
+
+        fruits.forEach((f, i) => {
+          f.update();
+          f.draw();
+          if (f.y > canvas.height + 150) {
+            if (!f.sliced && !f.isBomb) {
+              streakCount = 0; 
+              floatingTexts.push(new FloatingText(f.x, canvas.height - 30, 'TRƯỢT', '#FF9900'));
+              if (gameMode === 'classic') {
+                lives--;
+                updateLives();
+                if (lives <= 0) endGame();
+              }
+            }
+            fruits.splice(i, 1);
+          }
+        });
+
+        particles.forEach((p, i) => {
+          p.update();
+          p.draw();
+          if (p.life <= 0) particles.splice(i, 1);
+        });
+
+        floatingTexts.forEach((t, i) => {
+          t.update();
+          t.draw();
+          if (t.life <= 0) floatingTexts.splice(i, 1);
+        });
+      }
+      ctx.restore();
+      requestAnimationFrame(render);
+    };
+    render();
+
+    // --- Xử lý Bảng Xếp hạng Nội bộ ---
+    window.showLeaderboard = (mode) => {
+      playSound('ui');
+      leaderboardViewMode = mode || gameMode || 'classic';
+      document.getElementById('leaderboard-screen').classList.remove('hidden');
+      updateLeaderboardTabs();
+
+      const content = document.getElementById('leaderboard-content');
+      
+      const allScores = getLocalScores();
+      const filteredScores = allScores.filter(s => s.mode === leaderboardViewMode);
+      
+      // Sắp xếp giảm dần theo điểm
+      filteredScores.sort((a, b) => b.score - a.score);
+      const topScores = filteredScores.slice(0, 10);
+
+      let html = '';
+      topScores.forEach((data, i) => {
+        html += `<div style="padding:10px; border-bottom:1px solid #EEE; display:flex; justify-content:space-between; align-items:center">
+          <span>${i+1}. <strong>${data.name}</strong></span>
+          <span style="color:#FF5C8A; font-weight:bold">${data.score}</span>
+        </div>`;
+      });
+      content.innerHTML = html || '<div style="text-align:center; padding:20px; color:#999">Chưa có dữ liệu ở chế độ này</div>';
+    };
+
+    window.switchLeaderboardMode = (mode) => {
+      showLeaderboard(mode);
+    };
+
+    function updateLeaderboardTabs() {
+      document.getElementById('tab-classic').classList.toggle('active', leaderboardViewMode === 'classic');
+      document.getElementById('tab-timed').classList.toggle('active', leaderboardViewMode === 'timed');
+    }
+
+    window.closeLeaderboard = () => {
+        playSound('ui');
+        if (gameState === 'GAMEOVER') {
+            goToMenu();
+        } else {
+            document.getElementById('leaderboard-screen').classList.add('hidden');
+        }
+    };
+
+    document.getElementById('save-score-btn').onclick = () => {
+      playSound('ui');
+      const nameInput = document.getElementById('player-name');
+      const name = nameInput.value.trim() || "Người chơi";
+      const btn = document.getElementById('save-score-btn');
+      
+      saveLocalScore(name, score, gameMode);
+      
+      btn.disabled = true;
+      btn.textContent = "ĐÃ LƯU!";
+      
+      setTimeout(() => {
+          document.getElementById('game-over').classList.add('hidden');
+          showLeaderboard(gameMode);
+      }, 500);
+    };
+
+    window.startGame = startGame;
+  </script>
+</body>
+</html>
