@@ -428,9 +428,12 @@
     let fruits = [];
     let particles = [];
     let floatingTexts = [];
+    let fruitHalves = []; // các nửa quả bay tách ra sau khi chém trúng
+    let hitRings = [];    // vòng sáng bung ra tại điểm chém trúng
     let slashTrail = [];
     let lastMousePos = { x: 0, y: 0 };
     let currentMousePos = { x: 0, y: 0 };
+    let hasLastPos = false; // FIX: tránh chém "ma" từ (0,0) ở lần di chuyển đầu tiên
     
     let streakCount = 0;
 
@@ -476,8 +479,11 @@
         ctx.fillStyle = this.color;
         ctx.font = `bold ${this.size * this.scale}px Lexend`;
         ctx.textAlign = 'center';
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = 'rgba(255,255,255,0.8)';
+        // FIX HIỆU NĂNG: bỏ shadowBlur, dùng viền trắng mỏng thay thế (rẻ hơn nhiều)
+        // để chữ vẫn nổi trên nền mà không tốn phép đổ bóng của canvas mỗi frame.
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.strokeText(this.text, this.x, this.y);
         ctx.fillText(this.text, this.x, this.y);
         ctx.restore();
       }
@@ -507,6 +513,81 @@
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Một nửa quả bay ra sau khi chém trúng — cho cảm giác "vỡ tan" rõ ràng.
+    // side = -1 hoặc 1: quyết định nửa nào của quả được hiển thị (dùng clip)
+    // để trông giống bị cắt đôi thay vì 2 bản sao chồng lên nhau như trước.
+    class FruitHalf {
+      constructor(x, y, emoji, color, vx, vy, baseRotation, side) {
+        this.x = x;
+        this.y = y;
+        this.emoji = emoji;
+        this.color = color;
+        this.vx = vx;
+        this.vy = vy;
+        this.gravity = 0.45;
+        this.rotation = baseRotation;
+        this.rotationSpeed = side * (0.15 + Math.random() * 0.15);
+        this.side = side;
+        this.radius = 40;
+        this.opacity = 1;
+        this.scale = 1;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.rotation += this.rotationSpeed;
+        this.opacity -= 0.015;
+        this.scale -= 0.004;
+      }
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        ctx.globalAlpha = Math.max(0, this.opacity);
+        // Cắt (clip) đúng một nửa quả theo hướng chém, để trông như bị bổ đôi
+        ctx.beginPath();
+        if (this.side < 0) {
+          ctx.rect(-this.radius, -this.radius, this.radius, this.radius * 2);
+        } else {
+          ctx.rect(0, -this.radius, this.radius, this.radius * 2);
+        }
+        ctx.clip();
+        ctx.scale(this.scale, this.scale);
+        ctx.font = `${this.radius * 2}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // đẩy nhẹ ra xa tâm cắt để lộ rõ "ruột" quả thay vì mép rỗng
+        ctx.fillText(this.emoji, this.side < 0 ? 4 : -4, 0);
+        ctx.restore();
+      }
+    }
+
+    // Vòng sáng bung ra ngay tại điểm chém trúng — phản hồi thị giác tức thì
+    class HitRing {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.radius = 5;
+        this.opacity = 0.8;
+      }
+      update() {
+        this.radius += 4.5;
+        this.opacity -= 0.06;
+      }
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.opacity);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
       }
     }
@@ -554,25 +635,14 @@
         ctx.translate(this.x, this.y);
         ctx.scale(this.scale, this.scale);
         ctx.rotate(this.rotation);
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = 'rgba(0,0,0,0.2)';
+        // FIX HIỆU NĂNG: bỏ shadowBlur ở đây — shadowBlur rất tốn CPU/GPU khi
+        // vẽ lại mỗi frame cho từng quả (10-15 quả x 60 lần/giây), là nguyên
+        // nhân chính gây giật khi nhiều quả cùng xuất hiện trên màn hình.
         ctx.font = `${this.radius * 2}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.globalAlpha = this.opacity;
-        
-        if (this.sliced && !this.isBomb) {
-          ctx.save();
-          ctx.rotate(this.sliceAngle);
-          ctx.fillText(this.emoji, -12, 0);
-          ctx.restore();
-          ctx.save();
-          ctx.rotate(this.sliceAngle + Math.PI);
-          ctx.fillText(this.emoji, 12, 0);
-          ctx.restore();
-        } else {
-          ctx.fillText(this.emoji, 0, 0);
-        }
+        ctx.fillText(this.emoji, 0, 0);
         ctx.restore();
       }
 
@@ -580,6 +650,30 @@
         if (this.sliced) return;
         this.sliced = true;
         this.sliceAngle = angle;
+
+        if (!this.isBomb) {
+          // HIỆU ỨNG "VỠ TAN": tách quả thành 2 nửa bay ra 2 hướng ngược nhau
+          // (vuông góc với đường chém), có trọng lực + xoay lăn riêng, thay vì
+          // chỉ đổi opacity mờ dần như trước — giờ nhìn là biết ngay quả nào vừa
+          // bị chém trúng.
+          const perpX = -Math.sin(angle);
+          const perpY = Math.cos(angle);
+          const kick = 5 + Math.random() * 3;
+
+          fruitHalves.push(new FruitHalf(
+            this.x, this.y, this.emoji, this.color,
+            this.vx + perpX * kick, this.vy + perpY * kick - 3,
+            this.rotation, -1
+          ));
+          fruitHalves.push(new FruitHalf(
+            this.x, this.y, this.emoji, this.color,
+            this.vx - perpX * kick, this.vy - perpY * kick - 3,
+            this.rotation, 1
+          ));
+
+          // Vòng sáng bung ra ngay tại điểm chạm — phản hồi tức thì, dễ nhận biết
+          hitRings.push(new HitRing(this.x, this.y, this.color));
+        }
         
         if (this.isBomb) {
           playSound('bomb');
@@ -612,7 +706,9 @@
           floatingTexts.push(new FloatingText(this.x, this.y, `+${this.pts}`, this.color));
         }
         
-        for (let i = 0; i < 20; i++) {
+        // Giảm từ 20 -> 12 hạt/lần chém: mắt gần như không nhận ra khác biệt
+        // nhưng giảm đáng kể số phép vẽ mỗi frame khi combo liên tục nhanh.
+        for (let i = 0; i < 12; i++) {
           particles.push(new Particle(this.x, this.y, this.color));
         }
       }
@@ -636,8 +732,11 @@
       fruits = [];
       particles = [];
       floatingTexts = [];
+      fruitHalves = [];
+      hitRings = [];
       slashTrail = [];
       streakCount = 0;
+      hasLastPos = false;
       gameState = 'PLAYING';
       
       document.getElementById('main-menu').classList.add('hidden');
@@ -697,30 +796,88 @@
         startGame(gameMode);
     };
 
-    const handleMove = (x, y) => {
+    // FIX #1: Va chạm theo ĐOẠN THẲNG (segment) thay vì chỉ theo điểm hiện tại.
+    // Đây là nguyên nhân chính gây "chém hụt" khi vung tay nhanh (tunneling).
+    function distPointToSegment(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+      let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      const closestX = x1 + t * dx;
+      const closestY = y1 + t * dy;
+      return Math.hypot(px - closestX, py - closestY);
+    }
+
+    // FIX HIỆU NĂNG QUAN TRỌNG NHẤT:
+    // Trước đây, MỖI sự kiện mousemove/touchmove thô (có thể bắn ra 100-240 lần/giây
+    // tùy chuột/màn cảm ứng) đều chạy toàn bộ phép tính va chạm (so khoảng cách với
+    // từng quả trên màn hình) NGAY LẬP TỨC, không đồng bộ với vòng lặp render 60fps.
+    // Việc này khiến main thread bị tranh chấp giữa "xử lý sự kiện" và "vẽ khung hình",
+    // gây ra hiện tượng giật/lag dù đã chém trúng chính xác.
+    // Cách sửa: sự kiện chuột/cảm ứng giờ chỉ làm việc RẺ NHẤT có thể (di chuyển
+    // con trỏ + đẩy tọa độ vào hàng đợi). Toàn bộ phép tính va chạm + vệt chém
+    // được dồn lại và xử lý ĐÚNG 1 LẦN MỖI FRAME bên trong vòng lặp render.
+    let pendingMoves = [];
+
+    const queueMove = (x, y) => {
       currentMousePos = { x, y };
       cursor.style.left = `${x}px`;
       cursor.style.top = `${y}px`;
-
       if (gameState === 'PLAYING') {
-        const dist = Math.hypot(x - lastMousePos.x, y - lastMousePos.y);
-        if (dist > 10) { 
-          slashTrail.push({ x, y, age: 0 });
-          const angle = Math.atan2(y - lastMousePos.y, x - lastMousePos.x);
-          fruits.forEach(f => {
-            if (!f.sliced && Math.hypot(f.x - x, f.y - y) < f.radius + 15) {
-              f.slice(angle);
-            }
-          });
-        }
+        pendingMoves.push({ x, y });
+        // giới hạn hàng đợi để tránh phình to bất thường nếu tab bị treo tạm thời
+        if (pendingMoves.length > 40) pendingMoves.splice(0, pendingMoves.length - 40);
       }
-      lastMousePos = { x, y };
     };
 
-    window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
-    window.addEventListener('touchmove', e => {
+    function processPendingMoves() {
+      if (pendingMoves.length === 0) return;
+
+      for (const { x, y } of pendingMoves) {
+        if (!hasLastPos) {
+          // Điểm đầu tiên: chỉ khởi tạo vị trí, không chém (tránh chém "ma" từ góc màn hình)
+          lastMousePos = { x, y };
+          hasLastPos = true;
+          continue;
+        }
+
+        const dist = Math.hypot(x - lastMousePos.x, y - lastMousePos.y);
+
+        // nội suy thêm điểm cho vệt chém khi vung tay nhanh -> vệt mượt, không giật cục
+        const steps = Math.min(Math.ceil(dist / 8), 20);
+        for (let i = 1; i <= steps; i++) {
+          const ix = lastMousePos.x + (x - lastMousePos.x) * (i / steps);
+          const iy = lastMousePos.y + (y - lastMousePos.y) * (i / steps);
+          slashTrail.push({ x: ix, y: iy, age: 0 });
+        }
+
+        if (dist > 1) {
+          const angle = Math.atan2(y - lastMousePos.y, x - lastMousePos.x);
+          // va chạm với CẢ ĐOẠN đường vừa quét, không chỉ điểm cuối (chống tunneling)
+          for (const f of fruits) {
+            if (!f.sliced && distPointToSegment(f.x, f.y, lastMousePos.x, lastMousePos.y, x, y) < f.radius + 15) {
+              f.slice(angle);
+            }
+          }
+        }
+        lastMousePos = { x, y };
+      }
+      pendingMoves.length = 0;
+    }
+
+    window.addEventListener('mousemove', e => queueMove(e.clientX, e.clientY));
+    window.addEventListener('touchstart', e => {
+      hasLastPos = false; // reset để không nối vệt chém từ lần chạm trước
       const touch = e.touches[0];
-      handleMove(touch.clientX, touch.clientY);
+      lastMousePos = { x: touch.clientX, y: touch.clientY };
+      hasLastPos = true;
+    }, { passive: false });
+    window.addEventListener('touchmove', e => {
+      e.preventDefault(); // chặn cuộn/zoom trình duyệt giành cử chỉ vuốt trên mobile
+      const touch = e.touches[0];
+      queueMove(touch.clientX, touch.clientY);
     }, { passive: false });
 
     const spawnLoop = () => {
@@ -741,28 +898,54 @@
       }
 
       if (gameState === 'PLAYING') {
+        // Xử lý toàn bộ va chạm/vệt chém đã dồn lại — đúng 1 lần cho frame này
+        processPendingMoves();
+
         if (slashTrail.length > 1) {
+          // FIX #4: vẽ vệt chém bằng đường cong mượt (quadratic) qua điểm trung bình,
+          // thay vì nối thẳng góc cạnh giữa các điểm mẫu
           ctx.beginPath();
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
           ctx.lineWidth = 4;
           ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
           ctx.shadowBlur = 10;
           ctx.shadowColor = '#FFF';
           ctx.moveTo(slashTrail[0].x, slashTrail[0].y);
-          for (let i = 1; i < slashTrail.length; i++) {
-            ctx.lineTo(slashTrail[i].x, slashTrail[i].y);
+          for (let i = 1; i < slashTrail.length - 1; i++) {
+            const midX = (slashTrail[i].x + slashTrail[i + 1].x) / 2;
+            const midY = (slashTrail[i].y + slashTrail[i + 1].y) / 2;
+            ctx.quadraticCurveTo(slashTrail[i].x, slashTrail[i].y, midX, midY);
             slashTrail[i].age++;
           }
           ctx.stroke();
           ctx.shadowBlur = 0;
         }
-        slashTrail = slashTrail.filter(p => p.age < 12);
+        slashTrail = slashTrail.filter(p => p.age < 14);
 
-        fruits.forEach((f, i) => {
+        // Vòng sáng chém trúng — vẽ trước để nằm dưới các nửa quả bay
+        for (let i = hitRings.length - 1; i >= 0; i--) {
+          const r = hitRings[i];
+          r.update();
+          r.draw();
+          if (r.opacity <= 0) hitRings.splice(i, 1);
+        }
+
+        // FIX: lặp NGƯỢC khi có splice() bên trong — lặp xuôi + splice từng gây
+        // bỏ sót phần tử kế tiếp (ví dụ 2 quả rơi khỏi màn hình liên tiếp thì
+        // chỉ 1 quả bị trừ mạng), khiến cảm giác chơi không nhất quán.
+        for (let i = fruits.length - 1; i >= 0; i--) {
+          const f = fruits[i];
+          if (f.sliced) {
+            // Đã bị chém — nửa quả bay riêng (fruitHalves) đảm nhận phần vẽ,
+            // nên xoá quả nguyên khỏi mảng ngay để không vẽ chồng lên nữa.
+            fruits.splice(i, 1);
+            continue;
+          }
           f.update();
           f.draw();
           if (f.y > canvas.height + 150) {
-            if (!f.sliced && !f.isBomb) {
+            if (!f.isBomb) {
               streakCount = 0; 
               floatingTexts.push(new FloatingText(f.x, canvas.height - 30, 'TRƯỢT', '#FF9900'));
               if (gameMode === 'classic') {
@@ -773,19 +956,32 @@
             }
             fruits.splice(i, 1);
           }
-        });
+        }
 
-        particles.forEach((p, i) => {
+        // Các nửa quả bay tách ra sau khi chém — đây là phần tạo cảm giác "vỡ tan"
+        for (let i = fruitHalves.length - 1; i >= 0; i--) {
+          const h = fruitHalves[i];
+          h.update();
+          h.draw();
+          if (h.opacity <= 0 || h.y > canvas.height + 200) fruitHalves.splice(i, 1);
+        }
+
+        // Giới hạn số particle tối đa cùng lúc để tránh phình mảng khi combo liên tục
+        // nhanh (mỗi lần chém tạo 20 particle) -> tránh giật do garbage collection.
+        if (particles.length > 300) particles.splice(0, particles.length - 300);
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
           p.update();
           p.draw();
           if (p.life <= 0) particles.splice(i, 1);
-        });
+        }
 
-        floatingTexts.forEach((t, i) => {
+        for (let i = floatingTexts.length - 1; i >= 0; i--) {
+          const t = floatingTexts[i];
           t.update();
           t.draw();
           if (t.life <= 0) floatingTexts.splice(i, 1);
-        });
+        }
       }
       ctx.restore();
       requestAnimationFrame(render);
